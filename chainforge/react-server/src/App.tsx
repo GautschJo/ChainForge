@@ -50,6 +50,7 @@ import PromptNode from "./PromptNode";
 import CodeEvaluatorNode from "./CodeEvaluatorNode";
 import VisNode from "./VisNode";
 import InspectNode from "./InspectorNode";
+import TestNode from "./TestNode";
 import ScriptNode from "./ScriptNode";
 import { AlertModalContext } from "./AlertModal";
 import ItemsNode from "./ItemsNode";
@@ -203,6 +204,7 @@ const nodeTypes = {
   split: SplitNode,
   processor: CodeEvaluatorNode,
   media: MediaNode,
+  test: TestNode,
 };
 
 const nodeEmojis = {
@@ -222,6 +224,7 @@ const nodeEmojis = {
   join: <IconArrowMerge size={16} />,
   split: <IconArrowsSplit size={16} />,
   media: "📺",
+  test: "🧪",
 };
 
 const edgeTypes = {
@@ -562,6 +565,18 @@ const App = () => {
         tooltip:
           "Specify directories to load as local packages, so they can be imported in your Python evaluator nodes (add to sys path).",
         onClick: () => addNode("scriptNode", "script"),
+      },
+      {
+        key: "divider",
+      },
+      {
+        key: "testStuff",
+      },
+      {
+        key: "test",
+        title: "Test Node",
+        tooltip: "This is a test",
+        onClick: () => addNode("test"),
       },
     ] as NestedMenuItemProps[];
 

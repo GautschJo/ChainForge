@@ -766,6 +766,101 @@ const PromptNode: React.FC<PromptNodeProps> = ({
     promptText,
     pullInputChats,
   ]);
+///////////////////////////////////
+  const checkingMissingQueries = useCallback(() => {
+    if (status === "loading") return; 
+
+    let _llmItemsCurrState = llmItemsCurrState;
+
+    const [past_chat_llms, pulled_chats] =
+      node_type === "chat" ? pullInputChats() : [undefined, undefined];
+    let chat_hist_by_llm: Dict<ChatHistoryInfo[]> | undefined;
+    
+    if (node_type === "chat" && contWithPriorLLMs) {
+      if (past_chat_llms === undefined || pulled_chats === undefined) {
+        setRunTooltip("Attach an input to past conversations first.");
+        return;
+      }
+      _llmItemsCurrState = past_chat_llms as LLMSpec[];
+      chat_hist_by_llm = bucketChatHistoryInfosByLLM(
+        pulled_chats as ChatHistoryInfo[],
+      );
+    }
+
+    let pulled_vars = {};
+    
+    try {
+      pulled_vars = pullInputData(templateVars, id);
+    } catch (err) {
+      return;
+    }
+
+    if (node_type !== "chat" && showContToggle && contWithPriorLLMs) {
+      _llmItemsCurrState = getLLMsInPulledInputData(pulled_vars);
+    }
+    
+    if (!_llmItemsCurrState || _llmItemsCurrState.length === 0) {
+      setDataPropsForNode(id, { totalMissingQueries: 0 });
+      return;
+    }
+
+    fetchResponseCounts(
+      promptText,
+      pulled_vars,
+      _llmItemsCurrState,
+      chat_hist_by_llm,
+    )
+      .then((res) => {
+        if (res === undefined) return;
+        const [counts] = res;
+
+        const num_llms_missing = Object.keys(counts).length;
+
+        if (num_llms_missing === 0) {
+          setDataPropsForNode(id, { totalMissingQueries: 0 });
+          return;
+        }
+
+        const queries_per_llm: Dict<number> = {};
+        Object.keys(counts).forEach((llm_key) => {
+          queries_per_llm[llm_key] = Object.keys(counts[llm_key]).reduce(
+            (acc, prompt) => acc + counts[llm_key][prompt],
+            0,
+          );
+        });
+
+        const total_missing_queries = Object.keys(queries_per_llm).reduce(
+          (acc, llm_key) => acc + queries_per_llm[llm_key],
+          0,
+        );
+
+        setDataPropsForNode(id, { totalMissingQueries: total_missing_queries });
+      })
+      .catch((err) => {
+        console.error("Error checking missing queries:", err);
+      });
+
+  }, [status, 
+    llmItemsCurrState, 
+    node_type, 
+    contWithPriorLLMs, 
+    pullInputChats, 
+    pullInputData, 
+    templateVars, 
+    id, 
+    showContToggle, 
+    fetchResponseCounts, 
+    promptText, 
+    setDataPropsForNode
+  ]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkingMissingQueries();
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [checkingMissingQueries]);
 
   // On hover over the 'Run' button, request how many responses are required and update the tooltip. Soft fails.
   const handleRunHover = useCallback(() => {
@@ -833,9 +928,13 @@ const PromptNode: React.FC<PromptNodeProps> = ({
 
         // Check for empty counts (means no requests will be sent!)
         const num_llms_missing = Object.keys(counts).length;
+
+        
+
         if (num_llms_missing === 0) {
           setRunTooltip("Will load responses from cache");
           setResponsesWillChange(false);
+          setDataPropsForNode(id, { totalMissingQueries: num_llms_missing });
           return;
         }
 
@@ -849,6 +948,13 @@ const PromptNode: React.FC<PromptNodeProps> = ({
             0,
           );
         });
+
+        const total_missing_queries = Object.keys(queries_per_llm).reduce(
+          (acc, llm_key) => acc + queries_per_llm[llm_key],
+          0,
+        );
+
+        setDataPropsForNode(id, { totalMissingQueries: total_missing_queries });
 
         // Check if all counts are the same:
         if (num_llms_missing > 1) {
