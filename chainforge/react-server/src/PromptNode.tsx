@@ -766,16 +766,15 @@ const PromptNode: React.FC<PromptNodeProps> = ({
     promptText,
     pullInputChats,
   ]);
-///////////////////////////////////
   const checkingMissingQueries = useCallback(() => {
-    if (status === "loading") return; 
+    if (status === "loading") return;
 
     let _llmItemsCurrState = llmItemsCurrState;
 
     const [past_chat_llms, pulled_chats] =
       node_type === "chat" ? pullInputChats() : [undefined, undefined];
     let chat_hist_by_llm: Dict<ChatHistoryInfo[]> | undefined;
-    
+
     if (node_type === "chat" && contWithPriorLLMs) {
       if (past_chat_llms === undefined || pulled_chats === undefined) {
         setRunTooltip("Attach an input to past conversations first.");
@@ -788,7 +787,7 @@ const PromptNode: React.FC<PromptNodeProps> = ({
     }
 
     let pulled_vars = {};
-    
+
     try {
       pulled_vars = pullInputData(templateVars, id);
     } catch (err) {
@@ -798,9 +797,9 @@ const PromptNode: React.FC<PromptNodeProps> = ({
     if (node_type !== "chat" && showContToggle && contWithPriorLLMs) {
       _llmItemsCurrState = getLLMsInPulledInputData(pulled_vars);
     }
-    
+
     if (!_llmItemsCurrState || _llmItemsCurrState.length === 0) {
-      setDataPropsForNode(id, { totalMissingQueries: 0 });
+      setDataPropsForNode(id, { totalMissingQueries: 0, queriesPerModel: {} });
       return;
     }
 
@@ -817,7 +816,10 @@ const PromptNode: React.FC<PromptNodeProps> = ({
         const num_llms_missing = Object.keys(counts).length;
 
         if (num_llms_missing === 0) {
-          setDataPropsForNode(id, { totalMissingQueries: 0 });
+          setDataPropsForNode(id, {
+            totalMissingQueries: 0,
+            queriesPerModel: {},
+          });
           return;
         }
 
@@ -834,24 +836,39 @@ const PromptNode: React.FC<PromptNodeProps> = ({
           0,
         );
 
-        setDataPropsForNode(id, { totalMissingQueries: total_missing_queries });
+        // Break pending counts down by model (counts are keyed by llm_spec.key),
+        // so TestNode can estimate cost per model for budget transparency.
+        const keyToModel: Dict<string> = {};
+        _llmItemsCurrState.forEach((it) => {
+          if (it.key) keyToModel[it.key] = it.model;
+        });
+        const queriesPerModel: Dict<number> = {};
+        Object.keys(queries_per_llm).forEach((k) => {
+          const m = keyToModel[k] ?? k;
+          queriesPerModel[m] = (queriesPerModel[m] ?? 0) + queries_per_llm[k];
+        });
+
+        setDataPropsForNode(id, {
+          totalMissingQueries: total_missing_queries,
+          queriesPerModel,
+        });
       })
       .catch((err) => {
         console.error("Error checking missing queries:", err);
       });
-
-  }, [status, 
-    llmItemsCurrState, 
-    node_type, 
-    contWithPriorLLMs, 
-    pullInputChats, 
-    pullInputData, 
-    templateVars, 
-    id, 
-    showContToggle, 
-    fetchResponseCounts, 
-    promptText, 
-    setDataPropsForNode
+  }, [
+    status,
+    llmItemsCurrState,
+    node_type,
+    contWithPriorLLMs,
+    pullInputChats,
+    pullInputData,
+    templateVars,
+    id,
+    showContToggle,
+    fetchResponseCounts,
+    promptText,
+    setDataPropsForNode,
   ]);
 
   useEffect(() => {
@@ -928,8 +945,6 @@ const PromptNode: React.FC<PromptNodeProps> = ({
 
         // Check for empty counts (means no requests will be sent!)
         const num_llms_missing = Object.keys(counts).length;
-
-        
 
         if (num_llms_missing === 0) {
           setRunTooltip("Will load responses from cache");

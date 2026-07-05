@@ -344,6 +344,49 @@ export const RATE_LIMIT_BY_PROVIDER: { [key in LLMProvider]?: number } = {
   [LLMProvider.MiniMax]: 1000, // MiniMax API rate limits are generous; 1000 RPM to be safe.
 };
 
+/** Flat estimated cost (USD) per request, keyed by model string (matches the `model`
+ *  field in store.tsx's initLLMProviderMenu). Used by TestNode to turn request counts
+ *  into a budget figure.
+ *  ponytail: flat per-request estimate by user choice; real cost varies with tokens.
+ *  Tune these to your providers' pricing or observed averages. In-browser/webllm models
+ *  are free (omitted -> 0). Unknown model -> 0 (shown as untracked). */
+export const COST_PER_REQUEST_BY_MODEL: { [key in LLM]?: number } = {
+  // OpenAI
+  "gpt-5": 0.012,
+  "gpt-5-mini": 0.003,
+  "gpt-5-nano": 0.001,
+  "gpt-4o": 0.006,
+  "gpt-4o-mini": 0.001,
+  "gpt-4.1": 0.006,
+  "gpt-image-1": 0.02,
+  o3: 0.02,
+  "o3-mini": 0.004,
+  o1: 0.03,
+  "gpt-3.5-turbo": 0.001,
+  "dall-e-2": 0.02,
+  // Anthropic
+  "claude-3-7-sonnet-latest": 0.006,
+  "claude-3-5-haiku-latest": 0.002,
+  "claude-3-opus-latest": 0.03,
+  "claude-2": 0.008,
+  // Google Gemini
+  "gemini-2.5-pro": 0.006,
+  "gemini-2.5-flash": 0.001,
+  "gemini-2.5-flash-lite": 0.0005,
+  "gemini-2.0-flash": 0.001,
+  // DeepSeek
+  "deepseek-chat": 0.001,
+  "deepseek-reasoner": 0.002,
+  // MiniMax
+  "MiniMax-M2.7": 0.002,
+  "MiniMax-M2.7-highspeed": 0.002,
+};
+
+/** Look up the flat per-request cost estimate for a model. Unknown/undefined -> 0. */
+export function costPerRequest(model?: LLM): number {
+  return model === undefined ? 0 : COST_PER_REQUEST_BY_MODEL[model] ?? 0;
+}
+
 // Max concurrent requests. Add to this to further constrain the rate limiter.
 export const MAX_CONCURRENT: { [key in string | NativeLLM]?: number } = {};
 

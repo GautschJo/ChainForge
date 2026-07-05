@@ -1,13 +1,8 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
-import { Handle, Position } from "reactflow";
+import React from "react";
 import useStore from "./store";
 import BaseNode from "./BaseNode";
 import NodeLabel from "./NodeLabelComponent";
-import LLMResponseInspector, { exportToExcel } from "./LLMResponseInspector";
-import { grabResponses } from "./backend/backend";
-import { LLMResponse } from "./backend/typing";
-import { AlertModalContext } from "./AlertModal";
-import ResizeHandle from "./ResizeHandle";
+import { costPerRequest, LLM } from "./backend/models";
 
 export interface TestNodeProps {
   data: {
@@ -19,34 +14,88 @@ export interface TestNodeProps {
 }
 
 const TestNode: React.FC<TestNodeProps> = ({ data, id }) => {
-  const totalMissingLLMs = useStore((state) => {
-    return state.nodes.reduce((sum, node) => {
-      const missing = node.data?.totalMissingQueries ?? 0;
-      return sum + missing;
-    }, 0);
-  });
+  // Pending (not-yet-run) requests summed across all nodes.
+  const totalPending = useStore((state) =>
+    state.nodes.reduce(
+      (sum, node) => sum + (node.data?.totalMissingQueries ?? 0),
+      0,
+    ),
+  );
+
+  // Estimated budget: pending requests × flat per-model price, across all nodes.
+  // (Separate number-returning selectors avoid churning Zustand's Object.is equality.)
+  const estimatedCost = useStore((state) =>
+    state.nodes.reduce((sum, node) => {
+      const qpm = (node.data?.queriesPerModel ?? {}) as Record<string, number>;
+      return (
+        sum +
+        Object.keys(qpm).reduce(
+          (a, m) => a + qpm[m] * costPerRequest(m as LLM),
+          0,
+        )
+      );
+    }, 0),
+  );
+
+  // Actual spend: flat price for every completed response held on node data.
+  // ponytail: counts all held responses, so cache reloads (no new request) are
+  // included — a small over-count acceptable for a flat estimate.
+  const actualCost = useStore((state) =>
+    state.nodes.reduce((sum, node) => {
+      // Only prompt/chat nodes store fields as a flat array of responses; other
+      // nodes (e.g. tabular data) use an object under `fields`, so guard the type.
+      const raw = node.data?.fields;
+      const fields = (Array.isArray(raw) ? raw : []) as { llm?: unknown }[];
+      return (
+        sum +
+        fields.reduce((a, f) => {
+          const model =
+            typeof f?.llm === "object" && f.llm !== null
+              ? (f.llm as { model?: LLM }).model
+              : undefined;
+          return a + costPerRequest(model);
+        }, 0)
+      );
+    }, 0),
+  );
+
+  const stat = (
+    label: string,
+    value: string,
+    color = "#fff",
+  ): React.ReactElement => (
+    <div style={{ marginTop: "8px" }}>
+      <div style={{ fontSize: "12px", opacity: 0.8 }}>{label}</div>
+      <div
+        style={{
+          fontSize: "22px",
+          fontWeight: "bold",
+          color,
+          marginTop: "2px",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
 
   return (
-   <BaseNode classNames="test-node" nodeId={id}>
-      <NodeLabel
-        title={data.title || "Test Node"}
-        nodeId={id}
-        icon="🧪"
-      />
+    <BaseNode classNames="test-node" nodeId={id}>
+      <NodeLabel title={data.title || "Budget"} nodeId={id} icon="🧪" />
       <div style={{ padding: "12px", color: "#fff", minWidth: "180px" }}>
-        <div style={{ fontSize: "12px", opacity: 0.8 }}>
-          missing LLMs across all nodes
-        </div>
-        <div style={{ 
-          fontSize: "24px", 
-          fontWeight: "bold", 
-          color: totalMissingLLMs > 0 ? "#ff4d4f" : "#52c41a",
-          marginTop: "4px" 
-        }}>
-          {totalMissingLLMs}
-        </div>
+        {stat(
+          "pending requests",
+          String(totalPending),
+          totalPending > 0 ? "#faad14" : "#52c41a",
+        )}
+        {stat(
+          "estimated (pending) cost",
+          `$${estimatedCost.toFixed(4)}`,
+          "#faad14",
+        )}
+        {stat("actual (spent) cost", `$${actualCost.toFixed(4)}`, "#52c41a")}
       </div>
-   </BaseNode>
+    </BaseNode>
   );
 };
 
