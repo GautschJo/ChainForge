@@ -50,6 +50,7 @@ import PromptNode from "./PromptNode";
 import CodeEvaluatorNode from "./CodeEvaluatorNode";
 import VisNode from "./VisNode";
 import InspectNode from "./InspectorNode";
+import UncertaintyAuditNode from "./UncertaintyAuditNode";
 import TestNode from "./TestNode";
 import ScriptNode from "./ScriptNode";
 import { AlertModalContext } from "./AlertModal";
@@ -196,6 +197,7 @@ const nodeTypes = {
   multieval: MultiEvalNode,
   vis: VisNode,
   inspect: InspectNode,
+  uncertainty: UncertaintyAuditNode,
   script: ScriptNode,
   csv: ItemsNode,
   table: TabularDataNode,
@@ -217,6 +219,7 @@ const nodeEmojis = {
   multieval: <IconAbacus size={16} />,
   vis: "📊",
   inspect: "🔍",
+  uncertainty: "⚖️",
   script: <IconSettingsAutomation size={16} />,
   csv: <IconForms size={16} />,
   table: "🗂️",
@@ -543,6 +546,14 @@ const App = () => {
         tooltip:
           "Used to inspect responses from prompter or evaluation nodes, without opening up the pop-up view.",
         onClick: () => addNode("inspectNode", "inspect"),
+      },
+      {
+        key: "uncertainty",
+        title: "Uncertainty Auditor",
+        icon: nodeEmojis.uncertainty,
+        tooltip:
+          "Estimate a fairness metric per group with a live confidence interval and a stop/keep-sampling signal. (Attach an evaluator or scorer node as input.)",
+        onClick: () => addNode("uncertaintyNode", "uncertainty"),
       },
       {
         key: "divider",

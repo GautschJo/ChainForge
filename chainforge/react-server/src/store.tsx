@@ -88,6 +88,7 @@ const refreshableOutputNodeTypes = new Set([
   "prompt",
   "inspect",
   "vis",
+  "uncertainty",
   "llmeval",
   "textfields",
   "chat",
