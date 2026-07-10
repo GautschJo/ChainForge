@@ -1,8 +1,17 @@
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { NumberInput } from "@mantine/core";
 import useStore from "./store";
 import BaseNode from "./BaseNode";
 import NodeLabel from "./NodeLabelComponent";
 import { costPerRequest, LLM } from "./backend/models";
+import { APP_IS_RUNNING_LOCALLY } from "./backend/utils";
+
+const IS_RUNNING_LOCALLY = APP_IS_RUNNING_LOCALLY();
+// Remaining budget (USD), persisted in localStorage — the same place the
+// flow itself autosaves — so it survives sessions without a Flask server.
+// ponytail: per browser+origin; use the Flask global-config store if the
+// budget must be shared between dev (:3000) and packaged (:8000) installs.
+const BUDGET_KEY = "chainforge-budget-remaining";
 
 export interface TestNodeProps {
   data: {
@@ -59,6 +68,31 @@ const TestNode: React.FC<TestNodeProps> = ({ data, id }) => {
     }, 0),
   );
 
+  // Remaining budget in USD; null = not set yet (or not running locally).
+  const [remaining, setRemaining] = useState<number | null>(() => {
+    if (!IS_RUNNING_LOCALLY) return null;
+    const stored = localStorage.getItem(BUDGET_KEY);
+    return stored !== null && Number.isFinite(+stored) ? +stored : null;
+  });
+  const prevActual = useRef<number | null>(null);
+
+  const updateRemaining = useCallback((val: number) => {
+    setRemaining(val);
+    localStorage.setItem(BUDGET_KEY, String(val));
+  }, []);
+
+  // Deduct new spend from the budget. The first observed actualCost is the
+  // baseline: responses restored with the flow were already deducted in the
+  // session that ran them. Decreases (deleted responses) are not refunded.
+  // ponytail: loading a different flow without remounting this node re-counts
+  // its held responses as new spend; track spend at the query site if that bites.
+  useEffect(() => {
+    const prev = prevActual.current;
+    prevActual.current = actualCost;
+    if (prev === null || actualCost <= prev || remaining === null) return;
+    updateRemaining(remaining - (actualCost - prev));
+  }, [actualCost, remaining, updateRemaining]);
+
   const stat = (
     label: string,
     value: string,
@@ -94,6 +128,30 @@ const TestNode: React.FC<TestNodeProps> = ({ data, id }) => {
           "#faad14",
         )}
         {stat("actual (spent) cost", `$${actualCost.toFixed(4)}`, "#52c41a")}
+        {IS_RUNNING_LOCALLY && (
+          <>
+            {stat(
+              "remaining budget",
+              remaining === null ? "not set" : `$${remaining.toFixed(4)}`,
+              remaining !== null && remaining < estimatedCost
+                ? "#f5222d"
+                : "#52c41a",
+            )}
+            <NumberInput
+              label="Set / adjust budget (USD)"
+              size="xs"
+              mt="8px"
+              min={0}
+              precision={4}
+              step={1}
+              value={remaining ?? ""}
+              onChange={(v) => {
+                if (typeof v === "number") updateRemaining(v);
+              }}
+              className="nodrag"
+            />
+          </>
+        )}
       </div>
     </BaseNode>
   );
