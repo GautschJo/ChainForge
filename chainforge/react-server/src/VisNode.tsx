@@ -1412,7 +1412,7 @@ export const VisView = forwardRef<VisViewRef, VisViewProps>(
             ref={plotlyRef}
             data={plotlySpec}
             layout={plotlyLayout}
-            useResizeHandler={true}
+            useResizeHandler={(plotlySpec?.length ?? 0) > 0}
             className="plotly-vis"
             style={{
               display: plotlySpec && plotlySpec.length > 0 ? "block" : "none",
